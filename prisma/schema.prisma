@@ -1,0 +1,357 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ---------------------------------------------------------
+// 1. Candidate Profile & Verified Source of Truth Models
+// ---------------------------------------------------------
+
+model CandidateProfile {
+  id           String   @id @default(cuid())
+  fullName     String   @default("")
+  email        String   @default("")
+  phone        String   @default("")
+  country      String   @default("")
+  city         String   @default("")
+  linkedInUrl  String   @default("")
+  portfolioUrl String   @default("")
+  headline     String   @default("")
+  summary      String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Profile completion tracking
+  completionPercentage Int     @default(0)
+  completedSections    String  @default("[]") // JSON string array of completed section keys
+  isFullyComplete      Boolean @default(false)
+
+  // Relational sub-sections
+  education       Education[]
+  workExperience  WorkExperience[]
+  technicalSkills TechnicalSkill[]
+  projects        Project[]
+  certifications  Certification[]
+  preferences     EmploymentPreferences?
+  standardAnswers StandardAnswer[]
+  cvDocuments     CVDocument[]
+
+  // Downstream associations
+  evaluations  JobEvaluation[]
+  applications Application[]
+}
+
+model CVDocument {
+  id               String            @id @default(cuid())
+  profileId        String?
+  profile          CandidateProfile? @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  filename         String // Stored filename on disk
+  originalFilename String // Uploaded document original name
+  filePath         String // Relative disk path
+  fileSize         Int // File size in bytes
+  mimeType         String // "application/pdf" | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  rawText          String? // Extracted text content
+  parsedData       String? // JSON extracted sections
+  uploadedAt       DateTime          @default(now())
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([profileId])
+  @@index([uploadedAt])
+}
+
+model Education {
+  id              String           @id @default(cuid())
+  profileId       String
+  profile         CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  institution     String
+  degree          String
+  fieldOfStudy    String
+  startDate       String // e.g. "2018-09"
+  graduationDate  String // e.g. "2022-06"
+  academicDetails String           @default("")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([profileId])
+}
+
+model WorkExperience {
+  id               String           @id @default(cuid())
+  profileId        String
+  profile          CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  company          String
+  position         String
+  employmentType   String // 'full-time' | 'part-time' | 'contract' | 'freelance' | 'internship'
+  startDate        String // e.g. "2022-07"
+  endDate          String           @default("")
+  isCurrentRole    Boolean          @default(false)
+  responsibilities String           @default("[]") // Stored as JSON string array
+  achievements     String           @default("[]") // Stored as JSON string array
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([profileId])
+}
+
+model TechnicalSkill {
+  id          String           @id @default(cuid())
+  profileId   String
+  profile     CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name        String
+  category    String // SkillCategory: 'Frontend' | 'Backend' | 'DevOps / Cloud', etc.
+  proficiency String // 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert'
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([profileId, name])
+  @@index([profileId])
+  @@index([category])
+}
+
+model Project {
+  id                  String           @id @default(cuid())
+  profileId           String
+  profile             CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name                String
+  description         String
+  technologies        String           @default("[]") // Stored as JSON string array
+  projectUrl          String           @default("")
+  keyResponsibilities String           @default("")
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@index([profileId])
+}
+
+model Certification {
+  id                  String           @id @default(cuid())
+  profileId           String
+  profile             CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name                String
+  issuingOrganization String
+  dateObtained        String // e.g. "2023-05"
+  credentialUrl       String           @default("")
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@index([profileId])
+}
+
+model EmploymentPreferences {
+  id                       String           @id @default(cuid())
+  profileId                String           @unique
+  profile                  CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  targetJobTitles          String           @default("[]") // Stored as JSON string array
+  preferredEmploymentTypes String           @default("[]") // Stored as JSON string array
+  preferredSeniority       String           @default("[]") // Stored as JSON string array
+  remoteWorkPreference     String           @default("any") // 'remote-only' | 'hybrid' | 'onsite-or-remote' | 'any'
+  preferredCountries       String           @default("[]") // Stored as JSON string array
+  excludedLocations        String           @default("[]") // Stored as JSON string array
+  minSalaryCurrency        String           @default("USD")
+  minSalaryAmount          Float?
+  minSalaryPeriod          String           @default("yearly") // 'yearly' | 'monthly' | 'hourly'
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+}
+
+model StandardAnswer {
+  id        String           @id @default(cuid())
+  profileId String
+  profile   CandidateProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  question  String
+  answer    String
+  category  String           @default("General")
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([profileId])
+}
+
+// ---------------------------------------------------------
+// 2. Job Discovery & Ingestion Models
+// ---------------------------------------------------------
+
+model JobSource {
+  id           String    @id @default(cuid())
+  name         String    @unique // e.g. "RemoteOK", "WeWorkRemotely", "LinkedIn"
+  type         String // "rss" | "api" | "scraper"
+  baseUrl      String
+  isActive     Boolean   @default(true)
+  lastPolledAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  jobs Job[]
+}
+
+model Job {
+  id              String     @id @default(cuid())
+  sourceId        String?
+  source          JobSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  externalId      String? // Unique identifier on source platform
+  title           String
+  company         String
+  description     String // Full job description text
+  url             String     @unique // Unique URL prevents duplicate jobs
+  applicationUrl  String? // Direct ATS / application portal link if distinct
+  location        String     @default("Remote") // e.g. "Worldwide", "US Only", "San Francisco, CA"
+  workArrangement String     @default("remote") // "remote" | "hybrid" | "on-site"
+  employmentType  String? // "full-time" | "part-time" | "contract" | "freelance" | "internship"
+  experienceLevel String? // "Junior" | "Mid-Level" | "Senior" | "Lead" | "Staff"
+  skills          String     @default("[]") // JSON string array of required / extracted skills
+  salary          String? // e.g. "$120,000 - $150,000"
+  deadline        DateTime? // Application deadline
+  postedAt        DateTime? // Original posting date
+  discoveredAt    DateTime   @default(now()) // Discovery date
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  evaluations  JobEvaluation[]
+  applications Application[]
+
+  @@index([sourceId])
+  @@index([company])
+  @@index([workArrangement])
+  @@index([employmentType])
+  @@index([discoveredAt])
+}
+
+// ---------------------------------------------------------
+// 3. Evaluation & Application Tracking Models
+// ---------------------------------------------------------
+
+model JobEvaluation {
+  id                    String            @id @default(cuid())
+  jobId                 String
+  job                   Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  profileId             String?
+  profile               CandidateProfile? @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  overallMatchScore     Int // 0 to 100
+  scoringDimensions     String            @default("{}") // JSON object: skillsMatch, experienceMatch, salaryMatch, etc.
+  eligibility           String            @default("ELIGIBLE") // "ELIGIBLE" | "BORDERLINE" | "INELIGIBLE"
+  explanation           String // Comprehensive rationale narrative
+  missingQualifications String            @default("[]") // JSON string array of missing requirements
+  concerns              String            @default("[]") // JSON string array of potential mismatches/risks
+  strengths             String            @default("[]") // JSON string array of candidate competitive advantages
+  recommendation        String // "HIGHLY_RECOMMENDED" | "CONSIDER" | "NOT_RECOMMENDED"
+  evaluatedAt           DateTime          @default(now())
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([jobId])
+  @@index([profileId])
+  @@index([overallMatchScore])
+  @@index([eligibility])
+  @@index([recommendation])
+}
+
+model Application {
+  id              String            @id @default(cuid())
+  jobId           String?
+  job             Job?              @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  profileId       String?
+  profile         CandidateProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+  status          String            @default("PENDING_REVIEW") // "DISCOVERED" | "EVALUATING" | "NEEDS_REVIEW" | "PREPARING" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "READY_TO_SUBMIT" | "APPLIED" | "EXPIRED" | "ARCHIVED"
+  preparationDate DateTime?
+  reviewDate      DateTime?
+  approvalDate    DateTime?
+  submissionDate  DateTime?
+  notes           String?
+  rejectionReason String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  generatedDocuments GeneratedDocument[]
+
+  @@index([jobId])
+  @@index([profileId])
+  @@index([status])
+  @@index([submissionDate])
+}
+
+model GeneratedDocument {
+  id               String      @id @default(cuid())
+  applicationId    String
+  application      Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  documentType     String // "TAILORED_RESUME" | "COVER_LETTER" | "APPLICATION_ANSWERS"
+  filePath         String // Local file path where document is saved
+  originalFilename String // Original filename e.g. "Resume_Senior_Frontend_Acme.pdf"
+  version          Int         @default(1) // Version number to prevent overwriting prior generations
+  content          String? // Text / Markdown representation
+  mimeType         String      @default("application/pdf")
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@index([applicationId])
+  @@index([documentType])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------
+// 4. Automation Runs & Operations Logs
+// ---------------------------------------------------------
+
+model AutomationRun {
+  id                   String    @id @default(cuid())
+  runType              String    @default("SCHEDULED") // "DISCOVERY" | "EVALUATION" | "APPLICATION_PREP" | "FULL_PIPELINE" | "SCHEDULED"
+  status               String    @default("PENDING") // "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "PARTIAL_SUCCESS"
+  startTime            DateTime  @default(now())
+  completionTime       DateTime?
+  discoveredJobs       Int       @default(0)
+  evaluatedJobs        Int       @default(0)
+  qualifiedJobs        Int       @default(0)
+  preparedApplications Int       @default(0)
+  errors               String? // Detailed error trace or JSON array
+  trigger              String    @default("SCHEDULED") // "SCHEDULED_CRON" | "MANUAL" | "WEBHOOK"
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  activityLogs ActivityLog[]
+
+  @@index([runType])
+  @@index([status])
+  @@index([startTime])
+}
+
+model ActivityLog {
+  id              String         @id @default(cuid())
+  automationRunId String?
+  automationRun   AutomationRun? @relation(fields: [automationRunId], references: [id], onDelete: SetNull)
+  level           String         @default("INFO") // "DEBUG" | "INFO" | "WARN" | "ERROR"
+  action          String // e.g. "JOB_DISCOVERED", "JOB_EVALUATED", "APPLICATION_PREPARED", "DOCUMENT_GENERATED"
+  entityType      String? // "Job" | "JobEvaluation" | "Application" | "GeneratedDocument" | "CandidateProfile"
+  entityId        String? // Referencing entity ID
+  details         String? // JSON metadata or human-readable description
+  createdAt       DateTime       @default(now())
+
+  @@index([automationRunId])
+  @@index([level])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model NotificationLog {
+  id               String    @id @default(cuid())
+  channel          String    @default("TELEGRAM") // "TELEGRAM" | "EMAIL" | "SYSTEM"
+  recipient        String? // Target Chat ID or recipient address
+  notificationType String // "JOB_ALERT" | "APPLICATION_READY_FOR_REVIEW" | "SYSTEM_ERROR" | "DAILY_DIGEST"
+  title            String? // Alert headline or subject
+  message          String // Formatted notification text
+  metadata         String? // JSON metadata for programmatic action
+  status           String    @default("PENDING") // "PENDING" | "SENT" | "FAILED"
+  externalId       String? // Remote delivery ID (e.g. Telegram message ID)
+  error            String? // Error message if delivery failed
+  sentAt           DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([channel])
+  @@index([notificationType])
+  @@index([status])
+  @@index([createdAt])
+}
