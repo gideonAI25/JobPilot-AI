@@ -72,7 +72,7 @@ export function StatusBadge({ status, size = 'sm' }: StatusBadgeProps) {
         'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 border-zinc-200 dark:border-zinc-700';
       break;
     default:
-      label = normStatus.replace(/_/g, ' ');
+      label = String(status || 'PENDING_REVIEW').replace(/_/g, ' ');
   }
 
   const sizeClasses =
