@@ -6,3 +6,6 @@ export * from './jobPersistenceService';
 export * from './adapterRegistry';
 export * from './jobDiscoveryService';
 export * from './adapters/sampleAdapter';
+export * from './adapters/jobicyAdapter';
+export * from './adapters/weWorkRemotelyAdapter';
+export * from './adapters/remotiveAdapter';
