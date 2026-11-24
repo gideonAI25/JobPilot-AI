@@ -97,6 +97,58 @@ The application will be accessible at:
 | `/automation` | **Automation** | Scheduled background ingestion telemetry and structured system audit logs |
 | `/settings` | **Settings** | Database connection health, environment configuration, and service status |
 
+---
+
+## 🔍 Phase 4: Job Discovery Engine
+
+JobPilot AI features a decoupled, multi-source job discovery engine:
+
+- **Permitted Sources**:
+  - **Jobicy** (Official API v2): Remote international engineering & data roles with structured salary brackets.
+  - **We Work Remotely** (Public RSS 2.0): Remote AI & software engineering roles globally.
+  - **Remotive** (Official Public API): 100% remote global engineering & tech roles.
+- **LinkedIn & Manual Ingestion**:
+  - Direct paste of LinkedIn and external career URLs & descriptions.
+  - Canonical URL normalization (stripping tracking tokens like `trackingId`, `refId`, `utm_*`).
+  - Automatic external ID extraction (e.g. LinkedIn job ID `4028372819`).
+  - Incomplete listings without descriptions are saved and flagged as `NEEDS_REVIEW`.
+  - Zero scraping, zero automated logins, strictly compliant with terms.
+- **4-Tier Deduplication**:
+  1. Exact canonical URL matching.
+  2. Source external ID matching.
+  3. Canonical cross-source fingerprinting (`company::title::arrangement`).
+  4. Previously rejected / expired opportunity guard.
+
+---
+
+## 🧠 Phase 5: AI Intelligence & Evaluation Engine
+
+- **Official Google GenAI SDK (`@google/genai`)**:
+  - Server-side Gemini API integration (`gemini-2.5-flash`).
+  - Native structured JSON mode with runtime **Zod schema validation**.
+- **AI Provider Abstraction (`AIProvider`)**:
+  - Easily plug in alternative providers (e.g., local **Ollama** via `llama3.2`).
+  - Automatic fallback hierarchy and offline deterministic mock provider.
+- **Strict Candidate Profile Grounding & Anti-Hallucination Contract**:
+  - Never invents qualifications, degrees, skills, employment dates, or authorization.
+  - Missing facts are explicitly flagged with `requiresManualConfirmation: true`.
+- **Job Evaluation Engine**:
+  - **5 Configurable Dimensions**: Skills match (30%), Role relevance (25%), Seniority fit (15%), Location & Nigeria eligibility (20%), Job freshness (10%).
+  - **3-Tier Eligibility Classification**: `ELIGIBLE`, `UNCLEAR` (flagged for review, cannot be `STRONG_MATCH`), `INELIGIBLE` (strictly `NOT_RECOMMENDED`, blocked from application preparation).
+  - **Deterministic Scoring**: Gemini handles semantic understanding; deterministic code handles mathematical score aggregation and freshness calculations.
+- **Opportunity Ranking & Selection System**:
+  - Ranks evaluated opportunities based on match score, application deadline urgency, and listing freshness.
+  - Selects a configurable maximum (default: **3**) of qualified opportunities per run without mandatory quota.
+  - Pipeline protection: applications in `PENDING_REVIEW` or `APPROVED` are **never overwritten or duplicated**.
+
+---
+
+## 🔮 Roadmap: Next Steps
+
+- **Phase 6: Application Materials Generation**: Tailoring professional, truthful resumes and cover letters using verified candidate facts and Gemini.
+- **Phase 7: Browser Assistance**: Human-supervised autofill assistance for application portals using Playwright.
+- **Phase 8: Telegram Alerts & Automation**: Real-time qualified job notifications and daily pipeline digests.
+
 ### Building for Production
 
 To build and verify TypeScript types and production assets:
