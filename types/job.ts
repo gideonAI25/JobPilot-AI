@@ -37,9 +37,10 @@ export interface JobListItem {
 
 export interface ManualJobInput {
   url: string;
-  title: string;
-  company: string;
-  description: string;
+  originalUrl?: string;
+  title?: string;
+  company?: string;
+  description?: string;
   location?: string;
   applicationUrl?: string;
   workArrangement?: string;

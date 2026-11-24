@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       job: result.job,
+      isIncomplete: result.isIncomplete,
     });
   } catch (error) {
     console.error('Failed to add job:', error);

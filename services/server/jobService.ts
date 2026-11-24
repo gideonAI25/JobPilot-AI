@@ -6,6 +6,20 @@ import {
   ManualJobInput,
   JobFilterParams,
 } from '@/types/job';
+import {
+  normalizeJobUrl,
+  normalizeWorkArrangement,
+  normalizeEmploymentType,
+  normalizeExperienceLevel,
+  normalizeSkills,
+  generateJobFingerprint,
+  extractExternalIdFromUrl,
+  inferJobMetadataFromUrl,
+} from '@/services/discovery/jobNormalizationService';
+import { checkDuplicateJob } from '@/services/discovery/duplicateDetectionService';
+import { cleanHtmlDescription } from '@/services/discovery/utils/htmlCleaner';
+import { NormalizedJobPosting } from '@/services/discovery/types';
+import { createApplicationForJob } from '@/services/server/applicationService';
 
 function safeParseJson<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw) return fallback;
@@ -158,73 +172,151 @@ export async function getJobById(id: string): Promise<JobListItem | null> {
 
 /**
  * Manually adds a job opportunity to the SQLite database.
- * Prevents duplicate URLs and avoids inventing unsupplied data.
+ * Supports pasting job URLs (including LinkedIn) and pasted descriptions.
+ * Normalizes the listing, detects duplicates via 4-tier deduplication,
+ * preserves the original URL, and enters the discovery & evaluation pipeline.
+ * If the description is not provided, the job is saved with incomplete information
+ * and flagged with status 'NEEDS_REVIEW'.
  */
 export async function createManualJob(input: ManualJobInput): Promise<{
   success: boolean;
   job?: JobListItem;
   error?: string;
+  isIncomplete?: boolean;
 }> {
   try {
-    const trimmedUrl = input.url.trim();
-    const trimmedTitle = input.title.trim();
-    const trimmedCompany = input.company.trim();
-    const trimmedDesc = input.description.trim();
-
-    if (!trimmedUrl) {
+    const rawInputUrl = input.url?.trim() || '';
+    if (!rawInputUrl) {
       return { success: false, error: 'Job URL is required.' };
     }
-    if (!trimmedTitle) {
-      return { success: false, error: 'Job title is required.' };
-    }
-    if (!trimmedCompany) {
-      return { success: false, error: 'Company name is required.' };
-    }
-    if (!trimmedDesc) {
-      return { success: false, error: 'Job description is required.' };
+
+    // Protocol check
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(rawInputUrl);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return {
+          success: false,
+          error: `Invalid URL protocol "${parsedUrl.protocol}". Must be http:// or https://`,
+        };
+      }
+    } catch {
+      return { success: false, error: `Malformed URL provided: "${rawInputUrl}".` };
     }
 
-    // Check for existing duplicate URL
-    const existing = await prisma.job.findUnique({
-      where: { url: trimmedUrl },
-    });
-    if (existing) {
-      return {
-        success: false,
-        error: `A job with this URL is already recorded in the database: "${existing.title}" at ${existing.company}.`,
-      };
+    // Canonicalize URL and extract external ID
+    const canonicalUrl = normalizeJobUrl(rawInputUrl);
+    const originalUrl = input.originalUrl?.trim() || rawInputUrl;
+    const externalId = extractExternalIdFromUrl(rawInputUrl);
+    const isLinkedIn = parsedUrl.hostname.includes('linkedin.com');
+
+    // Infer title and company if not provided
+    const inferred = inferJobMetadataFromUrl(rawInputUrl);
+    const title = input.title?.trim() || inferred.title || (isLinkedIn ? 'LinkedIn Opportunity' : 'Manual Opportunity');
+    const company = input.company?.trim() || inferred.company || 'Unknown Company';
+
+    // Handle description: allow incomplete listings and flag for review
+    const rawDesc = input.description?.trim() || '';
+    const isIncomplete = rawDesc.length < 20;
+    const description = isIncomplete
+      ? '(No job description provided upon manual entry. Flagged for review.)'
+      : cleanHtmlDescription(rawDesc);
+
+    // Normalize metadata fields
+    const workArrangement = normalizeWorkArrangement(input.workArrangement, input.location, title);
+    const employmentType = normalizeEmploymentType(input.employmentType);
+    const experienceLevel = normalizeExperienceLevel(input.experienceLevel, title);
+    const skills = normalizeSkills(input.skills);
+    const location = input.location?.trim() || (workArrangement === 'remote' ? 'Remote' : 'Unspecified');
+    const salary = input.salary?.trim() || null;
+    let deadline: Date | null = null;
+    if (input.deadline) {
+      const d = new Date(input.deadline);
+      if (!isNaN(d.getTime())) deadline = d;
     }
 
-    // Ensure "Manual Entry" JobSource exists
+    const sourceName = isLinkedIn ? 'LinkedIn (Manual)' : 'Manual Entry';
+
+    // Construct normalized posting for duplicate detection
+    const normalizedPosting: NormalizedJobPosting = {
+      sourceName,
+      externalId: externalId || null,
+      title,
+      company,
+      description,
+      url: canonicalUrl,
+      applicationUrl: input.applicationUrl?.trim() || originalUrl,
+      location,
+      workArrangement,
+      employmentType,
+      experienceLevel,
+      skills,
+      salary,
+      deadline,
+      postedAt: new Date(),
+      fingerprint: generateJobFingerprint(company, title, workArrangement),
+    };
+
+    // Ensure JobSource exists
     let manualSource = await prisma.jobSource.findUnique({
-      where: { name: 'Manual Entry' },
+      where: { name: sourceName },
     });
     if (!manualSource) {
       manualSource = await prisma.jobSource.create({
         data: {
-          name: 'Manual Entry',
+          name: sourceName,
           type: 'manual',
-          baseUrl: 'https://jobpilot.local/manual',
+          baseUrl: isLinkedIn ? 'https://www.linkedin.com' : 'https://jobpilot.local/manual',
           isActive: true,
+          lastPolledAt: new Date(),
         },
       });
     }
 
+    // 1. Direct exact URL check on original URL as well (in case user pasted original URL earlier)
+    if (originalUrl !== canonicalUrl) {
+      const existingByOriginal = await prisma.job.findFirst({
+        where: {
+          OR: [
+            { url: originalUrl },
+            { applicationUrl: originalUrl },
+          ],
+        },
+      });
+      if (existingByOriginal) {
+        return {
+          success: false,
+          error: `A job with this URL is already recorded: "${existingByOriginal.title}" at ${existingByOriginal.company}.`,
+        };
+      }
+    }
+
+    // 2. Run comprehensive 4-tier deduplication
+    const dupCheck = await checkDuplicateJob(normalizedPosting, manualSource.id);
+    if (dupCheck.isDuplicate) {
+      return {
+        success: false,
+        error: dupCheck.details || 'A matching job opportunity is already recorded in the database.',
+      };
+    }
+
+    // 3. Save Job record
     const createdJob = await prisma.job.create({
       data: {
         sourceId: manualSource.id,
-        title: trimmedTitle,
-        company: trimmedCompany,
-        description: trimmedDesc,
-        url: trimmedUrl,
-        applicationUrl: input.applicationUrl?.trim() || null,
-        location: input.location?.trim() || 'Remote',
-        workArrangement: input.workArrangement || 'remote',
-        employmentType: input.employmentType || null,
-        experienceLevel: input.experienceLevel || null,
-        skills: JSON.stringify(input.skills || []),
-        salary: input.salary?.trim() || null,
-        deadline: input.deadline ? new Date(input.deadline) : null,
+        externalId: externalId || null,
+        title,
+        company,
+        description,
+        url: canonicalUrl,
+        applicationUrl: input.applicationUrl?.trim() || originalUrl,
+        location,
+        workArrangement,
+        employmentType,
+        experienceLevel,
+        skills: JSON.stringify(skills),
+        salary,
+        deadline,
       },
       include: {
         source: true,
@@ -236,7 +328,20 @@ export async function createManualJob(input: ManualJobInput): Promise<{
       },
     });
 
-    // Record audit event
+    // 4. Enter the same discovery & evaluation pipeline:
+    // Create Application record (NEEDS_REVIEW if incomplete description, DISCOVERED if complete)
+    const initialStatus = isIncomplete ? 'NEEDS_REVIEW' : 'DISCOVERED';
+    const appNotes = isIncomplete
+      ? '[INCOMPLETE LISTING] Job description was not provided upon manual entry. Flagged for review before automated evaluation.'
+      : '[MANUAL ENTRY] Opportunity entered manually by candidate. Ready for profile evaluation.';
+
+    await createApplicationForJob({
+      jobId: createdJob.id,
+      status: initialStatus,
+      notes: appNotes,
+    });
+
+    // 5. Record Activity Log
     await prisma.activityLog.create({
       data: {
         level: 'INFO',
@@ -247,18 +352,26 @@ export async function createManualJob(input: ManualJobInput): Promise<{
           title: createdJob.title,
           company: createdJob.company,
           url: createdJob.url,
+          originalUrl,
+          isLinkedIn,
+          isIncomplete,
+          applicationStatus: initialStatus,
         }),
       },
     });
 
+    // Refetch full job to include newly created application
+    const refetchedJob = await getJobById(createdJob.id);
+
     return {
       success: true,
-      job: mapDbJobToListItem(createdJob),
+      job: refetchedJob || mapDbJobToListItem(createdJob),
+      isIncomplete,
     };
   } catch (error: any) {
     console.error('Error creating manual job:', error);
     if (error.code === 'P2002') {
-      return { success: false, error: 'A job with this exact URL already exists.' };
+      return { success: false, error: 'A job with this URL already exists in database.' };
     }
     return {
       success: false,

@@ -17,10 +17,24 @@ const TRACKING_PARAMS = new Set([
   'mc_cid',
   'mc_eid',
   'trk',
+  'trackingid',
+  'refid',
+  'midsig',
+  'midtoken',
+  'lipi',
+  'licu',
+  'position',
+  'pagenum',
+  'origin',
+  'originalsubdomain',
+  'context',
+  'ebp',
+  'recommendedjobid',
 ]);
 
 /**
  * Strips tracking parameters, query artifacts, and trailing slashes from URLs.
+ * Canonicalizes LinkedIn job URLs to uniform /jobs/view/<id> format.
  */
 export function normalizeJobUrl(rawUrl: string): string {
   try {
@@ -28,6 +42,17 @@ export function normalizeJobUrl(rawUrl: string): string {
     parsed.protocol = parsed.protocol.toLowerCase();
     parsed.hostname = parsed.hostname.toLowerCase();
     parsed.hash = '';
+
+    // Handle LinkedIn URLs canonicalization
+    if (parsed.hostname.includes('linkedin.com')) {
+      const viewMatch = parsed.pathname.match(/\/jobs\/view\/(?:[a-z0-9-]+-)?(\d+)/i);
+      const currentJobId = parsed.searchParams.get('currentJobId');
+      const linkedInId = viewMatch ? viewMatch[1] : (currentJobId && /^\d+$/.test(currentJobId) ? currentJobId : null);
+
+      if (linkedInId) {
+        return `https://www.linkedin.com/jobs/view/${linkedInId}`;
+      }
+    }
 
     // Strip known marketing / tracking params
     const keysToDelete: string[] = [];
@@ -51,6 +76,75 @@ export function normalizeJobUrl(rawUrl: string): string {
   } catch {
     return rawUrl.trim();
   }
+}
+
+/**
+ * Extracts platform external ID from job URLs (e.g. LinkedIn job ID).
+ */
+export function extractExternalIdFromUrl(rawUrl: string): string | null {
+  try {
+    const parsed = new URL(rawUrl.trim());
+    if (parsed.hostname.includes('linkedin.com')) {
+      const viewMatch = parsed.pathname.match(/\/jobs\/view\/(?:[a-z0-9-]+-)?(\d+)/i);
+      if (viewMatch) return viewMatch[1];
+      const currentJobId = parsed.searchParams.get('currentJobId');
+      if (currentJobId && /^\d+$/.test(currentJobId)) return currentJobId;
+    }
+  } catch {}
+  return null;
+}
+
+/**
+ * Inactive/fallback metadata inference from URL slugs when user omits company or title.
+ */
+export function inferJobMetadataFromUrl(rawUrl: string): {
+  title?: string;
+  company?: string;
+  externalId?: string;
+} {
+  try {
+    const parsed = new URL(rawUrl.trim());
+    const externalId = extractExternalIdFromUrl(rawUrl) || undefined;
+
+    if (parsed.hostname.includes('linkedin.com')) {
+      // Check for /jobs/view/<title-slug>-at-<company-slug>-<id>
+      const slugMatch = parsed.pathname.match(/\/jobs\/view\/([a-z0-9-]+)-at-([a-z0-9-]+)-(\d+)/i);
+      if (slugMatch) {
+        const titleSlug = slugMatch[1].replace(/-/g, ' ');
+        const companySlug = slugMatch[2].replace(/-/g, ' ');
+        const title = titleSlug.replace(/\b\w/g, (c) => c.toUpperCase());
+        const company = companySlug.replace(/\b\w/g, (c) => c.toUpperCase());
+        return { title, company, externalId };
+      }
+
+      // Check for /jobs/view/<title-slug>-(\d+)
+      const simpleSlugMatch = parsed.pathname.match(/\/jobs\/view\/([a-z0-9-]+)-(\d+)/i);
+      if (simpleSlugMatch) {
+        const titleSlug = simpleSlugMatch[1].replace(/-/g, ' ');
+        const title = titleSlug.replace(/\b\w/g, (c) => c.toUpperCase());
+        return { title, company: 'LinkedIn Opportunity', externalId };
+      }
+
+      return {
+        title: 'LinkedIn Job Opportunity',
+        company: 'LinkedIn Opportunity',
+        externalId,
+      };
+    }
+
+    // Generic domain-based company fallback
+    const domainParts = parsed.hostname.replace(/^www\./, '').split('.');
+    if (domainParts.length >= 2) {
+      const brand = domainParts[0].charAt(0).toUpperCase() + domainParts[0].slice(1);
+      return {
+        company: brand,
+        title: 'Manual Opportunity',
+        externalId,
+      };
+    }
+  } catch {}
+
+  return {};
 }
 
 /**
