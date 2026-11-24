@@ -22,10 +22,51 @@ interface JobDetailDrawerProps {
 export function JobDetailDrawer({ job, onClose }: JobDetailDrawerProps) {
   const router = useRouter();
   const [isCreatingApp, setIsCreatingApp] = useState(false);
+  const [isEvaluating, setIsEvaluating] = useState(false);
+  const [currentEvaluation, setCurrentEvaluation] = useState(job?.evaluation || null);
 
   if (!job) return null;
 
+  const evalSummary = currentEvaluation;
+  const isIneligible = evalSummary?.eligibility === 'INELIGIBLE';
+
+  const handleEvaluate = async (force = false) => {
+    setIsEvaluating(true);
+    try {
+      const res = await fetch(`/api/jobs/${job.id}/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ forceReevaluate: force }),
+      });
+      const data = await res.json();
+      if (data.success && data.evaluation) {
+        setCurrentEvaluation({
+          id: data.evaluation.id || 'eval-1',
+          overallMatchScore: data.evaluation.overallMatchScore,
+          scoringDimensions: data.evaluation.scoringDimensions,
+          eligibility: data.evaluation.eligibility,
+          explanation: data.evaluation.explanation,
+          missingQualifications: data.evaluation.missingQualifications || [],
+          concerns: data.evaluation.potentialConcerns || [],
+          strengths: data.evaluation.relevantQualifications || [],
+          recommendation: data.evaluation.recommendation,
+          evaluatedAt: new Date(data.evaluation.evaluatedAt).toISOString(),
+        });
+        router.refresh();
+      }
+    } catch (err) {
+      console.error('Failed to evaluate job:', err);
+    } finally {
+      setIsEvaluating(false);
+    }
+  };
+
   const handleStartApplication = async () => {
+    if (isIneligible) {
+      alert('This job is classified as INELIGIBLE for your location/authorization and cannot proceed to application preparation.');
+      return;
+    }
+
     setIsCreatingApp(true);
     try {
       const res = await fetch('/api/applications', {
@@ -36,6 +77,8 @@ export function JobDetailDrawer({ job, onClose }: JobDetailDrawerProps) {
       const data = await res.json();
       if (data.success && data.application) {
         router.push(`/applications/${data.application.id}`);
+      } else {
+        alert(data.error || 'Failed to start application.');
       }
     } catch (err) {
       console.error('Failed to create application:', err);
@@ -43,8 +86,6 @@ export function JobDetailDrawer({ job, onClose }: JobDetailDrawerProps) {
       setIsCreatingApp(false);
     }
   };
-
-  const evalSummary = job.evaluation;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -108,7 +149,12 @@ export function JobDetailDrawer({ job, onClose }: JobDetailDrawerProps) {
         {/* Action Links Bar */}
         <div className="px-6 py-3 bg-white dark:bg-zinc-900 border-b border-zinc-100 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
-            {job.applicationId ? (
+            {isIneligible ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/50 text-rose-700 dark:text-rose-300 font-semibold text-xs">
+                <AlertCircleIcon className="w-3.5 h-3.5" />
+                <span>Ineligible for Application</span>
+              </span>
+            ) : job.applicationId ? (
               <Link
                 href={`/applications/${job.applicationId}`}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors"
@@ -248,11 +294,19 @@ export function JobDetailDrawer({ job, onClose }: JobDetailDrawerProps) {
               </div>
             </div>
           ) : (
-            <div className="p-3.5 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 flex items-center justify-between">
-              <span>This job has not been evaluated against your profile yet.</span>
-              <span className="text-[11px] font-semibold text-zinc-400">
-                Phase 4 Evaluation Engine
-              </span>
+            <div className="p-4 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-200 dark:border-zinc-800 text-xs flex items-center justify-between gap-4">
+              <div>
+                <span className="font-semibold text-zinc-900 dark:text-zinc-100 block">Not Evaluated Yet</span>
+                <span className="text-zinc-500 text-[11px]">Compare actual requirements against your verified candidate profile.</span>
+              </div>
+              <button
+                onClick={() => handleEvaluate(false)}
+                disabled={isEvaluating}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs shadow-xs transition-colors shrink-0 disabled:opacity-50"
+              >
+                <SparklesIcon className="w-3.5 h-3.5" />
+                <span>{isEvaluating ? 'Evaluating...' : 'Evaluate Fit'}</span>
+              </button>
             </div>
           )}
 

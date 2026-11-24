@@ -296,6 +296,15 @@ export async function createApplicationForJob(input: {
       return { success: false, error: 'Job not found in database.' };
     }
 
+    // Rule 4: Clearly ineligible jobs must not proceed to application preparation
+    const latestEval = job.evaluations?.[0];
+    if (latestEval && latestEval.eligibility === 'INELIGIBLE') {
+      return {
+        success: false,
+        error: 'This job opportunity is classified as INELIGIBLE for your location/authorization (Nigeria) and cannot proceed to application preparation.',
+      };
+    }
+
     // Check if an application already exists for this job
     const existing = await prisma.application.findFirst({
       where: { jobId: input.jobId },
