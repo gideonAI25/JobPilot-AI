@@ -12,6 +12,7 @@ import {
 import { StatusBadge } from '@/components/applications/StatusBadge';
 import { SubmissionConfirmModal } from '@/components/applications/SubmissionConfirmModal';
 import { RejectConfirmModal } from '@/components/applications/RejectConfirmModal';
+import { ScreeningAnswersView } from '@/components/applications/ScreeningAnswersView';
 import {
   ArrowLeftIcon,
   CheckCircleIcon,
@@ -93,6 +94,8 @@ export function ApplicationDetailView({
       const endpoint =
         activeDocType === 'COVER_LETTER'
           ? `/api/applications/${app.id}/documents/cover-letter/generate`
+          : activeDocType === 'APPLICATION_ANSWERS'
+          ? `/api/applications/${app.id}/documents/answers/generate`
           : `/api/applications/${app.id}/documents/generate`;
 
       const res = await fetch(endpoint, {
@@ -124,7 +127,11 @@ export function ApplicationDetailView({
       setShowCustomInstructions(false);
       setCustomInstructions('');
       const docLabel =
-        activeDocType === 'COVER_LETTER' ? 'Cover Letter' : 'Tailored CV';
+        activeDocType === 'COVER_LETTER'
+          ? 'Cover Letter'
+          : activeDocType === 'APPLICATION_ANSWERS'
+          ? 'Screening Answers'
+          : 'Tailored CV';
       setDocFeedback(`${docLabel} v${data.version} generated successfully!`);
     } catch (err) {
       setGenerateError(
@@ -550,44 +557,54 @@ export function ApplicationDetailView({
 
               {/* Action Buttons for Document */}
               <div className="flex flex-wrap items-center gap-2">
-                {/* AI Tailoring Button for Resume or Cover Letter */}
-                {(activeDocType === 'TAILORED_RESUME' ||
-                  activeDocType === 'COVER_LETTER') &&
-                  !isEditingDoc && (
-                    <>
-                      <button
-                        onClick={() => setShowCustomInstructions(!showCustomInstructions)}
-                        className="px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                        title="Add custom tailoring instructions for Gemini"
-                      >
-                        Instructions {showCustomInstructions ? '▲' : '▼'}
-                      </button>
+                {/* AI Tailoring Button */}
+                {!isEditingDoc && (
+                  <>
+                    <button
+                      onClick={() => setShowCustomInstructions(!showCustomInstructions)}
+                      className="px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                      title="Add custom tailoring instructions for Gemini"
+                    >
+                      Instructions {showCustomInstructions ? '▲' : '▼'}
+                    </button>
 
-                      <button
-                        onClick={handleGenerateDocument}
-                        disabled={isGeneratingDoc}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
-                      >
-                        <SparklesIcon className={`w-3.5 h-3.5 ${isGeneratingDoc ? 'animate-spin' : ''}`} />
-                        <span>
-                          {isGeneratingDoc
-                            ? `Tailoring ${
-                                activeDocType === 'COVER_LETTER' ? 'Cover Letter' : 'CV'
-                              } with Gemini...`
-                            : matchingDocs.length > 0
-                            ? `Regenerate ${
-                                activeDocType === 'COVER_LETTER' ? 'Cover Letter' : 'CV'
-                              }`
-                            : `Generate ${
-                                activeDocType === 'COVER_LETTER' ? 'Cover Letter' : 'Tailored CV'
-                              }`}
-                        </span>
-                      </button>
-                    </>
-                  )}
+                    <button
+                      onClick={handleGenerateDocument}
+                      disabled={isGeneratingDoc}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
+                    >
+                      <SparklesIcon className={`w-3.5 h-3.5 ${isGeneratingDoc ? 'animate-spin' : ''}`} />
+                      <span>
+                        {isGeneratingDoc
+                          ? `Drafting ${
+                              activeDocType === 'COVER_LETTER'
+                                ? 'Cover Letter'
+                                : activeDocType === 'APPLICATION_ANSWERS'
+                                ? 'Answers'
+                                : 'CV'
+                            } with Gemini...`
+                          : matchingDocs.length > 0
+                          ? `Regenerate ${
+                              activeDocType === 'COVER_LETTER'
+                                ? 'Cover Letter'
+                                : activeDocType === 'APPLICATION_ANSWERS'
+                                ? 'Answers'
+                                : 'CV'
+                            }`
+                          : `Generate ${
+                              activeDocType === 'COVER_LETTER'
+                                ? 'Cover Letter'
+                                : activeDocType === 'APPLICATION_ANSWERS'
+                                ? 'Screening Answers'
+                                : 'Tailored CV'
+                            }`}
+                      </span>
+                    </button>
+                  </>
+                )}
 
                 {/* PDF Preview and Download Buttons */}
-                {currentDoc && !isEditingDoc && (
+                {currentDoc && !isEditingDoc && activeDocType !== 'APPLICATION_ANSWERS' && (
                   <>
                     <button
                       onClick={() => setPreviewModalDoc(currentDoc)}
@@ -629,7 +646,7 @@ export function ApplicationDetailView({
                       <span>{isSavingDoc ? 'Saving...' : 'Save Changes'}</span>
                     </button>
                   </>
-                ) : (
+                ) : activeDocType !== 'APPLICATION_ANSWERS' ? (
                   <button
                     onClick={handleStartEditDoc}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 text-xs font-semibold rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
@@ -637,7 +654,7 @@ export function ApplicationDetailView({
                     <EditIcon className="w-3.5 h-3.5" />
                     <span>{currentDoc ? 'Edit Content' : 'Draft Material'}</span>
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
 
@@ -659,94 +676,105 @@ export function ApplicationDetailView({
             )}
 
             {/* Document Body */}
-            <div className="p-6">
-              {docFeedback && (
-                <div className="mb-4 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 font-medium">
-                  {docFeedback}
-                </div>
-              )}
-
-              {generateError && (
-                <div className="mb-4 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-300 font-medium">
-                  {generateError}
-                </div>
-              )}
-
-              {/* Alert for Flagged Information Gaps */}
-              {currentDoc?.content?.includes('Flagged Information Gaps') && (
-                <div className="mb-5 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 text-xs space-y-1">
-                  <div className="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-200">
-                    <AlertCircleIcon className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span>⚠️ Flagged Information Gaps (Manual Confirmation Required)</span>
+            {activeDocType === 'APPLICATION_ANSWERS' ? (
+              <ScreeningAnswersView
+                applicationId={app.id}
+                document={currentDoc}
+                onRefreshApplication={async () => {
+                  const refreshRes = await fetch(`/api/applications/${app.id}`);
+                  const refreshData = await refreshRes.json();
+                  if (refreshData.success && refreshData.application) {
+                    setApp(refreshData.application);
+                  }
+                }}
+                isGenerating={isGeneratingDoc}
+                onGenerate={handleGenerateDocument}
+              />
+            ) : (
+              <div className="p-6">
+                {docFeedback && (
+                  <div className="mb-4 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 font-medium">
+                    {docFeedback}
                   </div>
-                  <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed pl-6">
-                    Certain qualifications in this job description are unverified in your candidate profile. In accordance with JobPilot AI&apos;s anti-hallucination contract, these skills were NOT fabricated. Review them below before submitting.
-                  </p>
-                </div>
-              )}
+                )}
 
-              {isEditingDoc ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-xs text-zinc-500">
-                    <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-                      Editing {activeDocType.replace(/_/g, ' ')}
-                    </span>
-                    <span className="font-mono text-[11px]">
-                      Markdown supported • PDF auto-synchronizes on save
-                    </span>
+                {generateError && (
+                  <div className="mb-4 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-300 font-medium">
+                    {generateError}
                   </div>
-                  <textarea
-                    rows={18}
-                    value={editedContent}
-                    onChange={(e) => setEditedContent(e.target.value)}
-                    placeholder={`Write or paste tailored ${activeDocType.replace(
-                      /_/g,
-                      ' '
-                    )} content...`}
-                    className="w-full p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30 text-xs font-mono text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-100 leading-relaxed"
-                  />
-                </div>
-              ) : currentDoc?.content ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800 text-xs text-zinc-400">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-medium text-zinc-700 dark:text-zinc-300">
-                        {currentDoc.originalFilename}
-                      </span>
-                      <span className="px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 font-mono text-[10px]">
-                        v{currentDoc.version}
-                      </span>
-                      {currentDoc.mimeType === 'application/pdf' && (
-                        <span className="px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 font-mono text-[10px]">
-                          PDF Ready
-                        </span>
-                      )}
+                )}
+
+                {/* Alert for Flagged Information Gaps */}
+                {currentDoc?.content?.includes('Flagged Information Gaps') && (
+                  <div className="mb-5 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 text-xs space-y-1">
+                    <div className="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-200">
+                      <AlertCircleIcon className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span>⚠️ Flagged Information Gaps (Manual Confirmation Required)</span>
                     </div>
-                    <span>
-                      Updated {new Date(currentDoc.updatedAt).toLocaleDateString()}
-                    </span>
+                    <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed pl-6">
+                      Certain qualifications in this job description are unverified in your candidate profile. In accordance with JobPilot AI&apos;s anti-hallucination contract, these skills were NOT fabricated. Review them below before submitting.
+                    </p>
                   </div>
+                )}
 
-                  <div className="prose prose-sm dark:prose-invert max-w-none text-xs text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap font-sans leading-relaxed bg-zinc-50/40 dark:bg-zinc-800/20 p-5 rounded-xl border border-zinc-100 dark:border-zinc-800">
-                    {currentDoc.content}
+                {isEditingDoc ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-xs text-zinc-500">
+                      <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                        Editing {activeDocType.replace(/_/g, ' ')}
+                      </span>
+                      <span className="font-mono text-[11px]">
+                        Markdown supported • PDF auto-synchronizes on save
+                      </span>
+                    </div>
+                    <textarea
+                      rows={18}
+                      value={editedContent}
+                      onChange={(e) => setEditedContent(e.target.value)}
+                      placeholder={`Write or paste tailored ${activeDocType.replace(
+                        /_/g,
+                        ' '
+                      )} content...`}
+                      className="w-full p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/30 text-xs font-mono text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-100 leading-relaxed"
+                    />
                   </div>
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <FileTextIcon className="w-10 h-10 text-zinc-300 dark:text-zinc-600 mx-auto mb-3" />
-                  <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-                    No {activeDocType.replace(/_/g, ' ')} drafted yet
-                  </h4>
-                  <p className="text-xs text-zinc-400 max-w-md mx-auto mt-1.5 mb-5 leading-relaxed">
-                    {activeDocType === 'TAILORED_RESUME'
-                      ? 'Generate an ATS-compliant, tailored vector PDF resume customized to this job description using Gemini with 100% factual accuracy.'
-                      : activeDocType === 'COVER_LETTER'
-                      ? 'Generate an authentic, tailored, job-specific cover letter connecting your genuine achievements to this role with zero AI clichés.'
-                      : 'Draft and customize application materials manually or tailor them for review.'}
-                  </p>
-                  <div className="flex flex-wrap items-center justify-center gap-3">
-                    {(activeDocType === 'TAILORED_RESUME' ||
-                      activeDocType === 'COVER_LETTER') && (
+                ) : currentDoc?.content ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800 text-xs text-zinc-400">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-medium text-zinc-700 dark:text-zinc-300">
+                          {currentDoc.originalFilename}
+                        </span>
+                        <span className="px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 font-mono text-[10px]">
+                          v{currentDoc.version}
+                        </span>
+                        {currentDoc.mimeType === 'application/pdf' && (
+                          <span className="px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 font-mono text-[10px]">
+                            PDF Ready
+                          </span>
+                        )}
+                      </div>
+                      <span>
+                        Updated {new Date(currentDoc.updatedAt).toLocaleDateString()}
+                      </span>
+                    </div>
+
+                    <div className="prose prose-sm dark:prose-invert max-w-none text-xs text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap font-sans leading-relaxed bg-zinc-50/40 dark:bg-zinc-800/20 p-5 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                      {currentDoc.content}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <FileTextIcon className="w-10 h-10 text-zinc-300 dark:text-zinc-600 mx-auto mb-3" />
+                    <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+                      No {activeDocType.replace(/_/g, ' ')} drafted yet
+                    </h4>
+                    <p className="text-xs text-zinc-400 max-w-md mx-auto mt-1.5 mb-5 leading-relaxed">
+                      {activeDocType === 'TAILORED_RESUME'
+                        ? 'Generate an ATS-compliant, tailored vector PDF resume customized to this job description using Gemini with 100% factual accuracy.'
+                        : 'Generate an authentic, tailored, job-specific cover letter connecting your genuine achievements to this role with zero AI clichés.'}
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-3">
                       <button
                         onClick={handleGenerateDocument}
                         disabled={isGeneratingDoc}
@@ -763,18 +791,18 @@ export function ApplicationDetailView({
                               } with AI`}
                         </span>
                       </button>
-                    )}
-                    <button
-                      onClick={handleStartEditDoc}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs font-semibold transition-colors"
-                    >
-                      <EditIcon className="w-3.5 h-3.5" />
-                      <span>Draft Manually</span>
-                    </button>
+                      <button
+                        onClick={handleStartEditDoc}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs font-semibold transition-colors"
+                      >
+                        <EditIcon className="w-3.5 h-3.5" />
+                        <span>Draft Manually</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Application Notes Box */}
