@@ -558,13 +558,21 @@ export async function saveOrUpdateDocument(
         (existing.filePath.endsWith('.pdf') || existing.mimeType === 'application/pdf')
       ) {
         try {
-          const { renderMarkdownToPdfBuffer } = await import(
-            '@/services/cvGeneration/pdfGenerator'
-          );
+          let pdfBuffer: Buffer;
+          if (existing.documentType === 'COVER_LETTER') {
+            const { renderCoverLetterMarkdownToPdfBuffer } = await import(
+              '@/services/coverLetter/coverLetterPdfGenerator'
+            );
+            pdfBuffer = await renderCoverLetterMarkdownToPdfBuffer(doc.content);
+          } else {
+            const { renderMarkdownToPdfBuffer } = await import(
+              '@/services/cvGeneration/pdfGenerator'
+            );
+            pdfBuffer = await renderMarkdownToPdfBuffer(doc.content);
+          }
           const absPath = path.isAbsolute(existing.filePath)
             ? existing.filePath
             : path.join(/*turbopackIgnore: true*/ process.cwd(), existing.filePath);
-          const pdfBuffer = await renderMarkdownToPdfBuffer(doc.content);
           fs.writeFileSync(absPath, pdfBuffer);
         } catch (pdfErr) {
           console.error('Failed to sync updated PDF on disk:', pdfErr);

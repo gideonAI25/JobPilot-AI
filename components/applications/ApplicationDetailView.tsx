@@ -64,7 +64,7 @@ export function ApplicationDetailView({
 
   // Document Generation & Versioning state
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
-  const [isGeneratingCV, setIsGeneratingCV] = useState(false);
+  const [isGeneratingDoc, setIsGeneratingDoc] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [customInstructions, setCustomInstructions] = useState('');
   const [showCustomInstructions, setShowCustomInstructions] = useState(false);
@@ -84,13 +84,18 @@ export function ApplicationDetailView({
     matchingDocs[0] ||
     null;
 
-  // Generate or Regenerate tailored CV
-  const handleGenerateCV = async () => {
-    setIsGeneratingCV(true);
+  // Generate or Regenerate tailored CV or Cover Letter
+  const handleGenerateDocument = async () => {
+    setIsGeneratingDoc(true);
     setGenerateError(null);
     setDocFeedback(null);
     try {
-      const res = await fetch(`/api/applications/${app.id}/documents/generate`, {
+      const endpoint =
+        activeDocType === 'COVER_LETTER'
+          ? `/api/applications/${app.id}/documents/cover-letter/generate`
+          : `/api/applications/${app.id}/documents/generate`;
+
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -100,7 +105,10 @@ export function ApplicationDetailView({
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to generate tailored CV.');
+        throw new Error(
+          data.error ||
+            `Failed to generate ${activeDocType.replace(/_/g, ' ').toLowerCase()}.`
+        );
       }
 
       // Refresh application details
@@ -115,13 +123,15 @@ export function ApplicationDetailView({
 
       setShowCustomInstructions(false);
       setCustomInstructions('');
-      setDocFeedback(`Tailored CV v${data.version} generated successfully!`);
+      const docLabel =
+        activeDocType === 'COVER_LETTER' ? 'Cover Letter' : 'Tailored CV';
+      setDocFeedback(`${docLabel} v${data.version} generated successfully!`);
     } catch (err) {
       setGenerateError(
-        err instanceof Error ? err.message : 'Error generating CV.'
+        err instanceof Error ? err.message : 'Error generating document.'
       );
     } finally {
-      setIsGeneratingCV(false);
+      setIsGeneratingDoc(false);
     }
   };
 
@@ -540,33 +550,41 @@ export function ApplicationDetailView({
 
               {/* Action Buttons for Document */}
               <div className="flex flex-wrap items-center gap-2">
-                {/* AI Tailoring Button for Resume */}
-                {activeDocType === 'TAILORED_RESUME' && !isEditingDoc && (
-                  <>
-                    <button
-                      onClick={() => setShowCustomInstructions(!showCustomInstructions)}
-                      className="px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-                      title="Add custom tailoring instructions for Gemini"
-                    >
-                      Instructions {showCustomInstructions ? '▲' : '▼'}
-                    </button>
+                {/* AI Tailoring Button for Resume or Cover Letter */}
+                {(activeDocType === 'TAILORED_RESUME' ||
+                  activeDocType === 'COVER_LETTER') &&
+                  !isEditingDoc && (
+                    <>
+                      <button
+                        onClick={() => setShowCustomInstructions(!showCustomInstructions)}
+                        className="px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                        title="Add custom tailoring instructions for Gemini"
+                      >
+                        Instructions {showCustomInstructions ? '▲' : '▼'}
+                      </button>
 
-                    <button
-                      onClick={handleGenerateCV}
-                      disabled={isGeneratingCV}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
-                    >
-                      <SparklesIcon className={`w-3.5 h-3.5 ${isGeneratingCV ? 'animate-spin' : ''}`} />
-                      <span>
-                        {isGeneratingCV
-                          ? 'Tailoring CV with Gemini...'
-                          : matchingDocs.length > 0
-                          ? 'Regenerate CV'
-                          : 'Generate Tailored CV'}
-                      </span>
-                    </button>
-                  </>
-                )}
+                      <button
+                        onClick={handleGenerateDocument}
+                        disabled={isGeneratingDoc}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
+                      >
+                        <SparklesIcon className={`w-3.5 h-3.5 ${isGeneratingDoc ? 'animate-spin' : ''}`} />
+                        <span>
+                          {isGeneratingDoc
+                            ? `Tailoring ${
+                                activeDocType === 'COVER_LETTER' ? 'Cover Letter' : 'CV'
+                              } with Gemini...`
+                            : matchingDocs.length > 0
+                            ? `Regenerate ${
+                                activeDocType === 'COVER_LETTER' ? 'Cover Letter' : 'CV'
+                              }`
+                            : `Generate ${
+                                activeDocType === 'COVER_LETTER' ? 'Cover Letter' : 'Tailored CV'
+                              }`}
+                        </span>
+                      </button>
+                    </>
+                  )}
 
                 {/* PDF Preview and Download Buttons */}
                 {currentDoc && !isEditingDoc && (
@@ -722,17 +740,28 @@ export function ApplicationDetailView({
                   <p className="text-xs text-zinc-400 max-w-md mx-auto mt-1.5 mb-5 leading-relaxed">
                     {activeDocType === 'TAILORED_RESUME'
                       ? 'Generate an ATS-compliant, tailored vector PDF resume customized to this job description using Gemini with 100% factual accuracy.'
+                      : activeDocType === 'COVER_LETTER'
+                      ? 'Generate an authentic, tailored, job-specific cover letter connecting your genuine achievements to this role with zero AI clichés.'
                       : 'Draft and customize application materials manually or tailor them for review.'}
                   </p>
                   <div className="flex flex-wrap items-center justify-center gap-3">
-                    {activeDocType === 'TAILORED_RESUME' && (
+                    {(activeDocType === 'TAILORED_RESUME' ||
+                      activeDocType === 'COVER_LETTER') && (
                       <button
-                        onClick={handleGenerateCV}
-                        disabled={isGeneratingCV}
+                        onClick={handleGenerateDocument}
+                        disabled={isGeneratingDoc}
                         className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
                       >
-                        <SparklesIcon className={`w-4 h-4 ${isGeneratingCV ? 'animate-spin' : ''}`} />
-                        <span>{isGeneratingCV ? 'Tailoring CV with Gemini...' : 'Generate Tailored CV with AI'}</span>
+                        <SparklesIcon className={`w-4 h-4 ${isGeneratingDoc ? 'animate-spin' : ''}`} />
+                        <span>
+                          {isGeneratingDoc
+                            ? `Tailoring ${
+                                activeDocType === 'COVER_LETTER' ? 'Cover Letter' : 'CV'
+                              } with Gemini...`
+                            : `Generate ${
+                                activeDocType === 'COVER_LETTER' ? 'Cover Letter' : 'Tailored CV'
+                              } with AI`}
+                        </span>
                       </button>
                     )}
                     <button
