@@ -38,8 +38,9 @@ yarn-error.log*
 *.db
 *.db-journal
 
-# local uploads
+# local uploads and generated files
 uploads/
+storage/
 
 # vercel
 .vercel

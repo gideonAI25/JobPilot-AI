@@ -828,3 +828,4 @@ export function ArrowLeftIcon({ className = 'w-4 h-4', size = 16, ...props }: Ic
     </svg>
   );
 }
+

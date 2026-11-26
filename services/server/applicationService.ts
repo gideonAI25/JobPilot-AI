@@ -1,4 +1,6 @@
 import 'server-only';
+import fs from 'fs';
+import path from 'path';
 import { prisma } from '@/lib/prisma';
 import {
   ApplicationStatus,
@@ -549,6 +551,25 @@ export async function saveOrUpdateDocument(
           version: existing.version + 1,
         },
       });
+
+      // Synchronize PDF file on disk if document is a PDF
+      if (
+        existing.filePath &&
+        (existing.filePath.endsWith('.pdf') || existing.mimeType === 'application/pdf')
+      ) {
+        try {
+          const { renderMarkdownToPdfBuffer } = await import(
+            '@/services/cvGeneration/pdfGenerator'
+          );
+          const absPath = path.isAbsolute(existing.filePath)
+            ? existing.filePath
+            : path.join(/*turbopackIgnore: true*/ process.cwd(), existing.filePath);
+          const pdfBuffer = await renderMarkdownToPdfBuffer(doc.content);
+          fs.writeFileSync(absPath, pdfBuffer);
+        } catch (pdfErr) {
+          console.error('Failed to sync updated PDF on disk:', pdfErr);
+        }
+      }
 
       await prisma.activityLog.create({
         data: {

@@ -25,6 +25,8 @@ import {
   SaveIcon,
   XIcon,
   HistoryIcon,
+  EyeIcon,
+  DownloadIcon,
 } from '@/components/icons/Icons';
 
 interface ApplicationDetailViewProps {
@@ -60,11 +62,68 @@ export function ApplicationDetailView({
   const [actionError, setActionError] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
+  // Document Generation & Versioning state
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [isGeneratingCV, setIsGeneratingCV] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [customInstructions, setCustomInstructions] = useState('');
+  const [showCustomInstructions, setShowCustomInstructions] = useState(false);
+  const [previewModalDoc, setPreviewModalDoc] =
+    useState<GeneratedDocumentItem | null>(null);
+
   const portalUrl = app.applicationUrl || app.jobUrl;
 
-  // Selected document by active type
+  // Documents matching the active type, sorted newest version first
+  const matchingDocs = app.generatedDocuments
+    .filter((d) => d.documentType === activeDocType)
+    .sort((a, b) => b.version - a.version);
+
+  // Selected document (explicitly chosen docId or latest version)
   const currentDoc =
-    app.generatedDocuments.find((d) => d.documentType === activeDocType) || null;
+    matchingDocs.find((d) => d.id === selectedDocId) ||
+    matchingDocs[0] ||
+    null;
+
+  // Generate or Regenerate tailored CV
+  const handleGenerateCV = async () => {
+    setIsGeneratingCV(true);
+    setGenerateError(null);
+    setDocFeedback(null);
+    try {
+      const res = await fetch(`/api/applications/${app.id}/documents/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customInstructions: customInstructions.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to generate tailored CV.');
+      }
+
+      // Refresh application details
+      const refreshRes = await fetch(`/api/applications/${app.id}`);
+      const refreshData = await refreshRes.json();
+      if (refreshData.success && refreshData.application) {
+        setApp(refreshData.application);
+        if (data.documentId) {
+          setSelectedDocId(data.documentId);
+        }
+      }
+
+      setShowCustomInstructions(false);
+      setCustomInstructions('');
+      setDocFeedback(`Tailored CV v${data.version} generated successfully!`);
+    } catch (err) {
+      setGenerateError(
+        err instanceof Error ? err.message : 'Error generating CV.'
+      );
+    } finally {
+      setIsGeneratingCV(false);
+    }
+  };
 
   // Start editing document
   const handleStartEditDoc = () => {
@@ -423,7 +482,7 @@ export function ApplicationDetailView({
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl overflow-hidden shadow-xs">
             {/* Document sub-type selector header */}
             <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-800/40 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-wrap items-center gap-1.5">
                 {[
                   { type: 'TAILORED_RESUME', label: 'Tailored Resume' },
                   { type: 'COVER_LETTER', label: 'Cover Letter' },
@@ -438,6 +497,7 @@ export function ApplicationDetailView({
                       key={item.type}
                       onClick={() => {
                         setActiveDocType(item.type as DocumentType);
+                        setSelectedDocId(null);
                         setIsEditingDoc(false);
                       }}
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 ${
@@ -453,10 +513,85 @@ export function ApplicationDetailView({
                     </button>
                   );
                 })}
+
+                {/* Version switcher if multiple versions exist */}
+                {matchingDocs.length > 1 && (
+                  <div className="flex items-center gap-1 pl-3 border-l border-zinc-200 dark:border-zinc-700 ml-1">
+                    <span className="text-[11px] font-medium text-zinc-400">Ver:</span>
+                    {matchingDocs.map((doc) => (
+                      <button
+                        key={doc.id}
+                        onClick={() => {
+                          setSelectedDocId(doc.id);
+                          setIsEditingDoc(false);
+                        }}
+                        className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold transition-colors ${
+                          currentDoc?.id === doc.id
+                            ? 'bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900'
+                            : 'bg-zinc-200/70 dark:bg-zinc-700/60 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-300'
+                        }`}
+                      >
+                        v{doc.version}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons for Document */}
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* AI Tailoring Button for Resume */}
+                {activeDocType === 'TAILORED_RESUME' && !isEditingDoc && (
+                  <>
+                    <button
+                      onClick={() => setShowCustomInstructions(!showCustomInstructions)}
+                      className="px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                      title="Add custom tailoring instructions for Gemini"
+                    >
+                      Instructions {showCustomInstructions ? '▲' : '▼'}
+                    </button>
+
+                    <button
+                      onClick={handleGenerateCV}
+                      disabled={isGeneratingCV}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
+                    >
+                      <SparklesIcon className={`w-3.5 h-3.5 ${isGeneratingCV ? 'animate-spin' : ''}`} />
+                      <span>
+                        {isGeneratingCV
+                          ? 'Tailoring CV with Gemini...'
+                          : matchingDocs.length > 0
+                          ? 'Regenerate CV'
+                          : 'Generate Tailored CV'}
+                      </span>
+                    </button>
+                  </>
+                )}
+
+                {/* PDF Preview and Download Buttons */}
+                {currentDoc && !isEditingDoc && (
+                  <>
+                    <button
+                      onClick={() => setPreviewModalDoc(currentDoc)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs font-semibold rounded-lg transition-colors"
+                      title="Preview ATS-Compliant PDF"
+                    >
+                      <EyeIcon className="w-3.5 h-3.5" />
+                      <span>Preview PDF</span>
+                    </button>
+
+                    <a
+                      href={`/api/applications/${app.id}/documents/${currentDoc.id}/download`}
+                      download={currentDoc.originalFilename}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs font-semibold rounded-lg transition-colors"
+                      title="Download Vector PDF"
+                    >
+                      <DownloadIcon className="w-3.5 h-3.5" />
+                      <span>Download</span>
+                    </a>
+                  </>
+                )}
+
                 {isEditingDoc ? (
                   <>
                     <button
@@ -482,17 +617,53 @@ export function ApplicationDetailView({
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 text-xs font-semibold rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
                   >
                     <EditIcon className="w-3.5 h-3.5" />
-                    <span>{currentDoc ? 'Edit Material' : 'Draft Material'}</span>
+                    <span>{currentDoc ? 'Edit Content' : 'Draft Material'}</span>
                   </button>
                 )}
               </div>
             </div>
 
+            {/* Custom Instructions Collapsible Panel */}
+            {showCustomInstructions && (
+              <div className="p-4 bg-indigo-50/50 dark:bg-indigo-950/20 border-b border-indigo-100 dark:border-indigo-900/40 text-xs space-y-2">
+                <label className="font-semibold text-indigo-950 dark:text-indigo-200 flex items-center justify-between">
+                  <span>Custom Tailoring Guidance for Gemini (Optional)</span>
+                  <span className="text-[11px] font-normal text-indigo-600 dark:text-indigo-400">Strictly grounded in verified profile</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={customInstructions}
+                  onChange={(e) => setCustomInstructions(e.target.value)}
+                  placeholder="e.g. Emphasize my experience with Next.js and LLM orchestration; prioritize backend architecture projects..."
+                  className="w-full p-2.5 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+            )}
+
             {/* Document Body */}
             <div className="p-6">
               {docFeedback && (
-                <div className="mb-4 p-3 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-xs text-zinc-700 dark:text-zinc-300 font-medium">
+                <div className="mb-4 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 font-medium">
                   {docFeedback}
+                </div>
+              )}
+
+              {generateError && (
+                <div className="mb-4 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-300 font-medium">
+                  {generateError}
+                </div>
+              )}
+
+              {/* Alert for Flagged Information Gaps */}
+              {currentDoc?.content?.includes('Flagged Information Gaps') && (
+                <div className="mb-5 p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 text-xs space-y-1">
+                  <div className="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-200">
+                    <AlertCircleIcon className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>⚠️ Flagged Information Gaps (Manual Confirmation Required)</span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed pl-6">
+                    Certain qualifications in this job description are unverified in your candidate profile. In accordance with JobPilot AI&apos;s anti-hallucination contract, these skills were NOT fabricated. Review them below before submitting.
+                  </p>
                 </div>
               )}
 
@@ -503,11 +674,11 @@ export function ApplicationDetailView({
                       Editing {activeDocType.replace(/_/g, ' ')}
                     </span>
                     <span className="font-mono text-[11px]">
-                      Markdown supported
+                      Markdown supported • PDF auto-synchronizes on save
                     </span>
                   </div>
                   <textarea
-                    rows={16}
+                    rows={18}
                     value={editedContent}
                     onChange={(e) => setEditedContent(e.target.value)}
                     placeholder={`Write or paste tailored ${activeDocType.replace(
@@ -527,6 +698,11 @@ export function ApplicationDetailView({
                       <span className="px-1.5 py-0.2 rounded bg-zinc-100 dark:bg-zinc-800 font-mono text-[10px]">
                         v{currentDoc.version}
                       </span>
+                      {currentDoc.mimeType === 'application/pdf' && (
+                        <span className="px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 font-mono text-[10px]">
+                          PDF Ready
+                        </span>
+                      )}
                     </div>
                     <span>
                       Updated {new Date(currentDoc.updatedAt).toLocaleDateString()}
@@ -539,20 +715,34 @@ export function ApplicationDetailView({
                 </div>
               ) : (
                 <div className="text-center py-12">
-                  <FileTextIcon className="w-8 h-8 text-zinc-300 dark:text-zinc-600 mx-auto mb-2" />
-                  <h4 className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                  <FileTextIcon className="w-10 h-10 text-zinc-300 dark:text-zinc-600 mx-auto mb-3" />
+                  <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
                     No {activeDocType.replace(/_/g, ' ')} drafted yet
                   </h4>
-                  <p className="text-[11px] text-zinc-400 max-w-sm mx-auto mt-1 mb-4 leading-relaxed">
-                    JobPilot AI will draft tailored materials in Phase 5, or you can manually create and edit materials right now.
+                  <p className="text-xs text-zinc-400 max-w-md mx-auto mt-1.5 mb-5 leading-relaxed">
+                    {activeDocType === 'TAILORED_RESUME'
+                      ? 'Generate an ATS-compliant, tailored vector PDF resume customized to this job description using Gemini with 100% factual accuracy.'
+                      : 'Draft and customize application materials manually or tailor them for review.'}
                   </p>
-                  <button
-                    onClick={handleStartEditDoc}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shadow-xs"
-                  >
-                    <EditIcon className="w-3.5 h-3.5" />
-                    <span>Create Material</span>
-                  </button>
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    {activeDocType === 'TAILORED_RESUME' && (
+                      <button
+                        onClick={handleGenerateCV}
+                        disabled={isGeneratingCV}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
+                      >
+                        <SparklesIcon className={`w-4 h-4 ${isGeneratingCV ? 'animate-spin' : ''}`} />
+                        <span>{isGeneratingCV ? 'Tailoring CV with Gemini...' : 'Generate Tailored CV with AI'}</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={handleStartEditDoc}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs font-semibold transition-colors"
+                    >
+                      <EditIcon className="w-3.5 h-3.5" />
+                      <span>Draft Manually</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -762,6 +952,48 @@ export function ApplicationDetailView({
           });
         }}
       />
+
+      {/* PDF Document Preview Modal */}
+      {previewModalDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/40">
+              <div className="flex items-center gap-2">
+                <FileTextIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                  {previewModalDoc.originalFilename} (v{previewModalDoc.version})
+                </span>
+                <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold">
+                  ATS-Friendly Vector PDF
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={`/api/applications/${app.id}/documents/${previewModalDoc.id}/download`}
+                  download={previewModalDoc.originalFilename}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-semibold rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shadow-xs"
+                >
+                  <DownloadIcon className="w-3.5 h-3.5" />
+                  <span>Download PDF</span>
+                </a>
+                <button
+                  onClick={() => setPreviewModalDoc(null)}
+                  className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <XIcon className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 p-2 bg-zinc-100 dark:bg-zinc-950 overflow-hidden">
+              <iframe
+                src={`/api/applications/${app.id}/documents/${previewModalDoc.id}/preview`}
+                className="w-full h-[75vh] rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white"
+                title="PDF CV Preview"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
