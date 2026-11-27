@@ -17,6 +17,7 @@ import {
   CopyIcon,
   CheckIcon,
   FileTextIcon,
+  DownloadIcon,
 } from '@/components/icons/Icons';
 
 interface ScreeningAnswersViewProps {
@@ -83,6 +84,30 @@ export function ScreeningAnswersView({
     } catch {
       setFeedback('Failed to copy all answers.');
     }
+  };
+
+  // Download answers as formatted text file
+  const handleDownloadAnswers = () => {
+    if (items.length === 0) return;
+    const formatted = items
+      .map(
+        (i, idx) =>
+          `Q${idx + 1} (${i.category}): ${i.question}\nAnswer: ${i.answer}\nSource: ${i.source}\nStatus: ${
+            i.isVerified
+              ? 'Verified Standard'
+              : i.requiresConfirmation
+              ? 'Personal Confirmation Required'
+              : 'AI Drafted'
+          }\n`
+      )
+      .join('\n----------------------------------------\n\n');
+    const blob = new Blob([formatted], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = window.document.createElement('a');
+    link.href = url;
+    link.download = `Screening_Answers_v${parsedContent?.version || 1}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   // Start editing single answer
@@ -276,7 +301,16 @@ export function ScreeningAnswersView({
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={handleDownloadAnswers}
+            className="inline-flex items-center gap-1 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-semibold rounded-lg transition-colors"
+            title="Download questions and answers as formatted text"
+          >
+            <DownloadIcon className="w-3.5 h-3.5" />
+            <span>Download Answers</span>
+          </button>
+
           <button
             onClick={handleCopyAll}
             className="inline-flex items-center gap-1 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-xs font-semibold rounded-lg transition-colors"

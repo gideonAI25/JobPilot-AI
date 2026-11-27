@@ -60,6 +60,7 @@ export function ApplicationDetailView({
   // Modals
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [isJobDescModalOpen, setIsJobDescModalOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
@@ -321,8 +322,15 @@ export function ApplicationDetailView({
             </div>
           </div>
 
-          {/* External Links */}
+          {/* External & Quick Action Links */}
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              onClick={() => setIsJobDescModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors"
+            >
+              <FileTextIcon className="w-3.5 h-3.5 text-zinc-500" />
+              <span>View Job Description</span>
+            </button>
             {app.jobUrl && (
               <a
                 href={app.jobUrl}
@@ -358,14 +366,15 @@ export function ApplicationDetailView({
                 Submitted on{' '}
                 {app.submissionDate
                   ? new Date(app.submissionDate).toLocaleDateString()
-                  : 'file'}
+                  : 'file'}{' '}
+                (Candidate Confirmed)
               </span>
             ) : app.status === 'REJECTED' ? (
               <span className="text-rose-600 dark:text-rose-400 font-semibold">
                 Rejected: {app.rejectionReason || 'Declined opportunity'}
               </span>
             ) : app.status === 'ARCHIVED' ? (
-              <span className="text-zinc-500 font-semibold">Archived</span>
+              <span className="text-zinc-500 font-semibold">Archived Opportunity</span>
             ) : (
               <span className="text-zinc-700 dark:text-zinc-300 font-medium">
                 Stage: {app.status.replace(/_/g, ' ')}
@@ -374,74 +383,161 @@ export function ApplicationDetailView({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {/* Approve Button (when PENDING_REVIEW or NEEDS_REVIEW) */}
+            {/* When PENDING_REVIEW or NEEDS_REVIEW or PREPARING */}
             {(app.status === 'PENDING_REVIEW' ||
               app.status === 'NEEDS_REVIEW' ||
               app.status === 'PREPARING') && (
-              <button
-                disabled={isUpdatingStatus}
-                onClick={() => handleTransitionStatus('APPROVED')}
-                className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
-              >
-                <CheckCircleIcon className="w-3.5 h-3.5" />
-                <span>Approve Materials</span>
-              </button>
+              <>
+                <button
+                  disabled={isUpdatingStatus}
+                  onClick={() => handleTransitionStatus('APPROVED')}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
+                >
+                  <CheckCircleIcon className="w-3.5 h-3.5" />
+                  <span>Approve Application</span>
+                </button>
+                <button
+                  onClick={() => setIsRejectModalOpen(true)}
+                  className="px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg border border-rose-200 dark:border-rose-900 transition-colors"
+                >
+                  Reject
+                </button>
+                <button
+                  disabled={isUpdatingStatus}
+                  onClick={() => handleTransitionStatus('ARCHIVED')}
+                  className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+                  title="Archive Opportunity"
+                >
+                  <ArchiveIcon className="w-4 h-4" />
+                </button>
+              </>
             )}
 
-            {/* Ready to Submit Button (when APPROVED) */}
+            {/* When APPROVED */}
             {app.status === 'APPROVED' && (
-              <button
-                disabled={isUpdatingStatus}
-                onClick={() => handleTransitionStatus('READY_TO_SUBMIT')}
-                className="inline-flex items-center gap-1 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
-              >
-                <SparklesIcon className="w-3.5 h-3.5" />
-                <span>Ready to Submit</span>
-              </button>
+              <>
+                <button
+                  disabled={isUpdatingStatus}
+                  onClick={() => handleTransitionStatus('READY_TO_SUBMIT')}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
+                >
+                  <SparklesIcon className="w-3.5 h-3.5" />
+                  <span>Mark Ready to Submit</span>
+                </button>
+                <button
+                  onClick={() => setIsApplyModalOpen(true)}
+                  className="inline-flex items-center gap-1 px-3.5 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-semibold rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shadow-xs"
+                >
+                  <CheckCircleIcon className="w-3.5 h-3.5" />
+                  <span>Confirm Applied</span>
+                </button>
+                <button
+                  disabled={isUpdatingStatus}
+                  onClick={() => handleTransitionStatus('PENDING_REVIEW')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors"
+                >
+                  Return to Review
+                </button>
+                <button
+                  onClick={() => setIsRejectModalOpen(true)}
+                  className="px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg border border-rose-200 dark:border-rose-900 transition-colors"
+                >
+                  Reject
+                </button>
+                <button
+                  disabled={isUpdatingStatus}
+                  onClick={() => handleTransitionStatus('ARCHIVED')}
+                  className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+                  title="Archive Opportunity"
+                >
+                  <ArchiveIcon className="w-4 h-4" />
+                </button>
+              </>
             )}
 
-            {/* Confirm Manual Submission (Active for APPROVED or READY_TO_SUBMIT or PENDING_REVIEW) */}
-            {app.status !== 'APPLIED' && (
-              <button
-                onClick={() => setIsApplyModalOpen(true)}
-                className="inline-flex items-center gap-1 px-3.5 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-semibold rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shadow-xs"
-              >
-                <CheckCircleIcon className="w-3.5 h-3.5" />
-                <span>Confirm Applied</span>
-              </button>
+            {/* When READY_TO_SUBMIT */}
+            {app.status === 'READY_TO_SUBMIT' && (
+              <>
+                <button
+                  onClick={() => setIsApplyModalOpen(true)}
+                  className="inline-flex items-center gap-1 px-3.5 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-semibold rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shadow-xs"
+                >
+                  <CheckCircleIcon className="w-3.5 h-3.5" />
+                  <span>Confirm Applied</span>
+                </button>
+                <button
+                  disabled={isUpdatingStatus}
+                  onClick={() => handleTransitionStatus('APPROVED')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors"
+                >
+                  Back to Approved
+                </button>
+                <button
+                  disabled={isUpdatingStatus}
+                  onClick={() => handleTransitionStatus('PENDING_REVIEW')}
+                  className="px-2.5 py-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors"
+                >
+                  Return to Review
+                </button>
+                <button
+                  onClick={() => setIsRejectModalOpen(true)}
+                  className="px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg border border-rose-200 dark:border-rose-900 transition-colors"
+                >
+                  Reject
+                </button>
+                <button
+                  disabled={isUpdatingStatus}
+                  onClick={() => handleTransitionStatus('ARCHIVED')}
+                  className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+                  title="Archive Opportunity"
+                >
+                  <ArchiveIcon className="w-4 h-4" />
+                </button>
+              </>
             )}
 
-            {/* Reject Button */}
-            {app.status !== 'REJECTED' && app.status !== 'APPLIED' && (
-              <button
-                onClick={() => setIsRejectModalOpen(true)}
-                className="px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg border border-rose-200 dark:border-rose-900 transition-colors"
-              >
-                Reject
-              </button>
+            {/* When APPLIED */}
+            {app.status === 'APPLIED' && (
+              <>
+                <button
+                  disabled={isUpdatingStatus}
+                  onClick={() => handleTransitionStatus('PENDING_REVIEW')}
+                  className="px-3 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors"
+                >
+                  Re-open for Review
+                </button>
+                <button
+                  disabled={isUpdatingStatus}
+                  onClick={() => handleTransitionStatus('ARCHIVED')}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors"
+                >
+                  <ArchiveIcon className="w-3.5 h-3.5" />
+                  <span>Archive Opportunity</span>
+                </button>
+              </>
             )}
 
-            {/* Re-open Review (if Rejected or Archived) */}
+            {/* When REJECTED or ARCHIVED */}
             {(app.status === 'REJECTED' || app.status === 'ARCHIVED') && (
-              <button
-                disabled={isUpdatingStatus}
-                onClick={() => handleTransitionStatus('PENDING_REVIEW')}
-                className="px-3 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors"
-              >
-                Re-open for Review
-              </button>
-            )}
-
-            {/* Archive Button */}
-            {app.status !== 'ARCHIVED' && (
-              <button
-                disabled={isUpdatingStatus}
-                onClick={() => handleTransitionStatus('ARCHIVED')}
-                className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
-                title="Archive Application"
-              >
-                <ArchiveIcon className="w-4 h-4" />
-              </button>
+              <>
+                <button
+                  disabled={isUpdatingStatus}
+                  onClick={() => handleTransitionStatus('PENDING_REVIEW')}
+                  className="px-3 py-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors"
+                >
+                  Re-open for Review
+                </button>
+                {app.status !== 'ARCHIVED' && (
+                  <button
+                    disabled={isUpdatingStatus}
+                    onClick={() => handleTransitionStatus('ARCHIVED')}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 rounded-lg border border-zinc-200 dark:border-zinc-700 transition-colors"
+                  >
+                    <ArchiveIcon className="w-3.5 h-3.5" />
+                    <span>Archive Opportunity</span>
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -859,53 +955,189 @@ export function ApplicationDetailView({
       {/* TAB 2: JOB DETAILS & MATCH ANALYSIS */}
       {activeTab === 'job' && (
         <div className="space-y-6">
-          {/* AI Match Breakdown (if available) */}
-          {app.evaluationSummary && (
-            <div className="bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-700 rounded-2xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <SparklesIcon className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                  <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-                    AI Evaluation & Match Dimensions
-                  </span>
+          {/* AI Match Breakdown & Scoring Dimensions */}
+          {app.evaluationSummary ? (
+            <div className="space-y-6">
+              {/* Header card with recommendation and score */}
+              <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-xs space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <SparklesIcon className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    <div>
+                      <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                        AI Fit Evaluation & Scoring Analysis
+                      </h3>
+                      <p className="text-xs text-zinc-500">
+                        Grounded assessment against your verified candidate profile
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {app.recommendation && (
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                        {app.recommendation.replace(/_/g, ' ')}
+                      </span>
+                    )}
+                    <span className="text-xs font-bold px-3 py-1 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                      {app.evaluationSummary.overallMatchScore}% Overall Fit
+                    </span>
+                  </div>
                 </div>
-                <span className="text-xs font-bold px-2.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300">
-                  {app.evaluationSummary.overallMatchScore}% Overall Fit
-                </span>
-              </div>
 
-              <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed font-medium">
-                {app.evaluationSummary.explanation}
-              </p>
-
-              {/* Strengths & Missing Qualifications */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                {app.evaluationSummary.strengths.length > 0 && (
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-emerald-600 block mb-1">
-                      Strengths Matched
+                {/* Eligibility Assessment Card */}
+                <div className="p-4 rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200 dark:border-zinc-700/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wide">
+                      Location & Authorization Eligibility
                     </span>
-                    <ul className="text-xs text-zinc-600 dark:text-zinc-400 space-y-1 list-disc list-inside">
-                      {app.evaluationSummary.strengths.map((s, i) => (
-                        <li key={i}>{s}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {app.evaluationSummary.missingQualifications.length > 0 && (
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-amber-600 block mb-1">
-                      Missing Qualifications / Gaps
+                    <span
+                      className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${
+                        app.evaluationSummary.eligibility === 'ELIGIBLE'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                          : app.evaluationSummary.eligibility === 'INELIGIBLE'
+                          ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                      }`}
+                    >
+                      {app.evaluationSummary.eligibility}
                     </span>
-                    <ul className="text-xs text-zinc-600 dark:text-zinc-400 space-y-1 list-disc list-inside">
-                      {app.evaluationSummary.missingQualifications.map((m, i) => (
-                        <li key={i}>{m}</li>
-                      ))}
-                    </ul>
                   </div>
-                )}
+                  <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">
+                    {app.evaluationSummary.eligibility === 'ELIGIBLE'
+                      ? 'Opportunity explicitly accepts remote applications from Nigeria or is open worldwide without domestic visa restrictions.'
+                      : app.evaluationSummary.eligibility === 'INELIGIBLE'
+                      ? 'Listing has strict location restrictions that exclude Nigeria or require domestic authorization not currently verified.'
+                      : 'Geographical eligibility is unspecified in the listing. Please verify employer visa sponsorship or remote contracting terms.'}
+                  </p>
+                </div>
+
+                {/* Scoring Dimensions Breakdown */}
+                {app.evaluationSummary.scoringDimensions &&
+                  Object.keys(app.evaluationSummary.scoringDimensions).length > 0 && (
+                    <div className="space-y-3 pt-2">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                        Evaluation Scoring Dimensions
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {[
+                          {
+                            key: 'skillsMatch',
+                            label: 'Skills Match',
+                            weight: '30%',
+                            score: app.evaluationSummary.scoringDimensions.skillsMatch ?? 0,
+                            barColor: 'bg-indigo-600',
+                          },
+                          {
+                            key: 'roleRelevance',
+                            label: 'Role Relevance',
+                            weight: '25%',
+                            score: app.evaluationSummary.scoringDimensions.roleRelevance ?? 0,
+                            barColor: 'bg-purple-600',
+                          },
+                          {
+                            key: 'experienceFit',
+                            label: 'Experience Fit',
+                            weight: '15%',
+                            score:
+                              app.evaluationSummary.scoringDimensions.experienceFit ??
+                              app.evaluationSummary.scoringDimensions.experienceSeniorityFit ??
+                              0,
+                            barColor: 'bg-sky-600',
+                          },
+                          {
+                            key: 'locationEligibility',
+                            label: 'Location / Nigeria Fit',
+                            weight: '20%',
+                            score:
+                              app.evaluationSummary.scoringDimensions.locationEligibility ??
+                              app.evaluationSummary.scoringDimensions.locationFit ??
+                              0,
+                            barColor: 'bg-emerald-600',
+                          },
+                          {
+                            key: 'jobFreshness',
+                            label: 'Posting Freshness',
+                            weight: '10%',
+                            score:
+                              app.evaluationSummary.scoringDimensions.jobFreshness ??
+                              app.evaluationSummary.scoringDimensions.freshnessScore ??
+                              0,
+                            barColor: 'bg-amber-600',
+                          },
+                        ].map((dim) => (
+                          <div
+                            key={dim.key}
+                            className="p-3 rounded-xl bg-zinc-50/70 dark:bg-zinc-800/40 border border-zinc-200/60 dark:border-zinc-700/60 space-y-2"
+                          >
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-semibold text-zinc-800 dark:text-zinc-200">
+                                {dim.label}
+                              </span>
+                              <span className="font-bold text-zinc-900 dark:text-zinc-100">
+                                {dim.score}%
+                              </span>
+                            </div>
+                            <div className="w-full h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden">
+                              <div
+                                className={`h-full ${dim.barColor} rounded-full`}
+                                style={{ width: `${Math.min(100, Math.max(0, dim.score))}%` }}
+                              />
+                            </div>
+                            <div className="text-[10px] text-zinc-400">Weight: {dim.weight}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                {/* Explanation Narrative */}
+                <div className="pt-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1.5">
+                    Evaluator Assessment
+                  </h4>
+                  <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed font-medium bg-zinc-50 dark:bg-zinc-800/30 p-4 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                    {app.evaluationSummary.explanation}
+                  </p>
+                </div>
+
+                {/* Strengths & Missing Qualifications */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                  <div>
+                    <span className="text-[11px] uppercase font-bold text-emerald-600 dark:text-emerald-400 block mb-1.5">
+                      ✓ Candidate Strengths Matched
+                    </span>
+                    {app.evaluationSummary.strengths.length > 0 ? (
+                      <ul className="text-xs text-zinc-700 dark:text-zinc-300 space-y-1.5 list-disc list-inside bg-emerald-50/40 dark:bg-emerald-950/20 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/50">
+                        {app.evaluationSummary.strengths.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-zinc-400">No specific strengths recorded.</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="text-[11px] uppercase font-bold text-amber-600 dark:text-amber-400 block mb-1.5">
+                      ⚠️ Missing Qualifications / Gaps
+                    </span>
+                    {app.evaluationSummary.missingQualifications.length > 0 ? (
+                      <ul className="text-xs text-zinc-700 dark:text-zinc-300 space-y-1.5 list-disc list-inside bg-amber-50/40 dark:bg-amber-950/20 p-3 rounded-xl border border-amber-100 dark:border-amber-900/50">
+                        {app.evaluationSummary.missingQualifications.map((m, i) => (
+                          <li key={i}>{m}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-zinc-400">No major qualification gaps identified.</p>
+                    )}
+                  </div>
+                </div>
               </div>
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-xs text-center text-xs text-zinc-400">
+              No evaluation record found for this job opportunity.
             </div>
           )}
 
@@ -930,9 +1162,22 @@ export function ApplicationDetailView({
 
           {/* Full Job Description */}
           <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 shadow-xs space-y-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500">
-              Original Job Description
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                Original Job Description
+              </h3>
+              {portalUrl && (
+                <a
+                  href={portalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+                >
+                  <span>Open Hiring Portal</span>
+                  <ExternalLinkIcon className="w-3 h-3" />
+                </a>
+              )}
+            </div>
             <div className="prose prose-sm dark:prose-invert max-w-none text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed font-sans bg-zinc-50/50 dark:bg-zinc-800/20 p-5 rounded-xl border border-zinc-100 dark:border-zinc-800">
               {app.jobDescription || 'No description provided.'}
             </div>
@@ -1047,6 +1292,100 @@ export function ApplicationDetailView({
                 className="w-full h-[75vh] rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white"
                 title="PDF CV Preview"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Job Description Quick Reference Modal */}
+      {isJobDescModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-800/40">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
+                  <FileTextIcon className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                    {app.jobTitle}
+                  </h3>
+                  <div className="text-xs text-zinc-500 font-medium">
+                    {app.company} • {app.location} ({app.workArrangement})
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {portalUrl && (
+                  <a
+                    href={portalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-xs font-semibold hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors shadow-xs"
+                  >
+                    <span>Employer Portal</span>
+                    <ExternalLinkIcon className="w-3.5 h-3.5" />
+                  </a>
+                )}
+                <button
+                  onClick={() => setIsJobDescModalOpen(false)}
+                  className="p-1.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <XIcon className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 p-6 overflow-y-auto space-y-4">
+              {/* Job Metadata Chips */}
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {app.salary && (
+                  <span className="px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 font-semibold">
+                    💰 {app.salary}
+                  </span>
+                )}
+                <span className="px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-medium">
+                  📍 {app.location}
+                </span>
+                <span className="px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-medium capitalize">
+                  🌐 {app.workArrangement}
+                </span>
+                {app.matchScore !== null && (
+                  <span className="px-2.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold">
+                    ✓ {app.matchScore}% Match
+                  </span>
+                )}
+              </div>
+
+              {/* Required Skills */}
+              {app.jobSkills && app.jobSkills.length > 0 && (
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-zinc-400 block mb-1.5">
+                    Target Skills
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {app.jobSkills.map((s, i) => (
+                      <span
+                        key={i}
+                        className="text-xs font-medium px-2.5 py-1 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200"
+                      >
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Full Job Description */}
+              <div>
+                <span className="text-[10px] uppercase font-bold text-zinc-400 block mb-1.5">
+                  Job Description Text
+                </span>
+                <div className="prose prose-sm dark:prose-invert max-w-none text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed font-sans bg-zinc-50/70 dark:bg-zinc-800/30 p-5 rounded-xl border border-zinc-100 dark:border-zinc-800">
+                  {app.jobDescription || 'No description provided.'}
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -144,11 +144,13 @@ export async function getApplicationById(
   // Retrieve activity audit logs for this application
   const activityLogs = await prisma.activityLog.findMany({
     where: {
-      entityType: 'Application',
-      entityId: id,
+      OR: [
+        { entityType: 'Application', entityId: id },
+        { details: { contains: id } },
+      ],
     },
     orderBy: { createdAt: 'desc' },
-    take: 50,
+    take: 100,
   });
 
   const baseItem = mapDbAppToListItem(dbApp);
@@ -453,14 +455,19 @@ export async function transitionApplicationStatus(
         : (app.submissionDate || now);
     } else if (toStatus === 'APPROVED') {
       updateData.approvalDate = app.approvalDate || now;
+    } else if (toStatus === 'READY_TO_SUBMIT') {
+      updateData.approvalDate = app.approvalDate || now;
     } else if (toStatus === 'PENDING_REVIEW') {
       updateData.reviewDate = app.reviewDate || now;
+      if (fromStatus === 'REJECTED') {
+        updateData.rejectionReason = null;
+      }
     } else if (toStatus === 'PREPARING') {
       updateData.preparationDate = app.preparationDate || now;
     } else if (toStatus === 'REJECTED') {
-      if (transition.rejectionReason) {
-        updateData.rejectionReason = transition.rejectionReason.trim();
-      }
+      updateData.rejectionReason = transition.rejectionReason
+        ? transition.rejectionReason.trim()
+        : 'Declined opportunity';
     }
 
     const updated = await prisma.application.update({
@@ -477,10 +484,15 @@ export async function transitionApplicationStatus(
     });
 
     // Record audit event in ActivityLog
+    const actionName =
+      fromStatus === toStatus && transition.notes !== undefined
+        ? 'APPLICATION_NOTES_UPDATED'
+        : 'APPLICATION_STATUS_CHANGED';
+
     await prisma.activityLog.create({
       data: {
         level: 'INFO',
-        action: 'APPLICATION_STATUS_CHANGED',
+        action: actionName,
         entityType: 'Application',
         entityId: id,
         details: JSON.stringify({
@@ -489,7 +501,7 @@ export async function transitionApplicationStatus(
           jobTitle: app.job?.title,
           company: app.job?.company,
           notes: transition.notes,
-          rejectionReason: transition.rejectionReason,
+          rejectionReason: updateData.rejectionReason ?? app.rejectionReason,
           submissionDate: updateData.submissionDate?.toISOString?.(),
         }),
       },
